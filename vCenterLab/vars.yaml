@@ -1,0 +1,67 @@
+vcenter_details:
+  hostname:       "10.10.10.1"
+  username:       "administrator@vsphere.local"
+  password:       "VMware1!"
+  validate_certs: "false"
+
+esxi_details:
+  username:       "root"
+  password:       "VMware1!"
+  validate_certs: "false"
+
+datacenters:
+  - name:  "dc1"
+    state: "present"
+
+clusters:
+  - name:        "mgmt"
+    datacenter:  "dc1"
+    enable_ha:   false
+    enable_drs:  false
+    enable_vsan: false
+    state:       "present"
+
+  - name:        "cluster01"
+    datacenter:  "dc1"
+    enable_ha:   true
+    enable_drs:  false
+    enable_vsan: false
+    state:       "present"
+
+  - name:        "cluster02"
+    datacenter:  "dc1"
+    enable_ha:   true
+    enable_drs:  false
+    enable_vsan: false
+    state:       "present"
+
+esxi_hosts:
+    - name:       "esxi01"
+      ip:         "10.10.10.2"
+      datacenter: "dc1"
+      cluster:    "mgmt"
+      state:      "present"
+    
+    - name:       "esxi100"
+      ip:         "10.10.10.3"
+      datacenter: "dc1"
+      cluster:    "cluster01"
+      state:      "present"
+
+    - name:       "esxi101"
+      ip:         "10.10.10.4"
+      datacenter: "dc1"
+      cluster:    "cluster01"
+      state:      "present"
+    
+    - name:       "esxi102"
+      ip:         "10.10.10.5"
+      datacenter: "dc1"
+      cluster:    "cluster02"
+      state:      "present"
+
+    - name:       "esxi103"
+      ip:         "10.10.10.6"
+      datacenter: "dc1"
+      cluster:    "cluster02"
+      state:      "present"

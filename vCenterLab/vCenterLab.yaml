@@ -1,0 +1,47 @@
+---
+- hosts:        localhost
+  connection:   local
+  gather_facts: false
+
+  vars_files: 
+    - vars.yaml
+    
+  tasks:
+    - name: Create Datacenters
+      vmware_datacenter:
+        hostname:        "{{ vcenter_details.hostname }}"
+        username:        "{{ vcenter_details.username }}"
+        password:        "{{ vcenter_details.password }}"
+        validate_certs:  "{{ vcenter_details.validate_certs }}"
+        datacenter_name: "{{ item.name }}"
+        state:           "{{ item.state }}"
+      with_items:        "{{ datacenters }}"
+
+    - name: Create Clusters
+      vmware_cluster:
+        hostname:        "{{ vcenter_details.hostname }}"
+        username:        "{{ vcenter_details.username }}"
+        password:        "{{ vcenter_details.password }}"
+        validate_certs:  "{{ vcenter_details.validate_certs }}"
+        datacenter_name: "{{ item.datacenter }}"
+        cluster_name:    "{{ item.name }}"
+        enable_ha:       "{{ item.enable_ha }}"
+        enable_drs:      "{{ item.enable_drs }}"
+        enable_vsan:     "{{ item.enable_vsan }}"
+        state:           "{{ item.state }}"
+      with_items:        "{{ clusters }}"
+
+    - name: Add ESXi Hosts to clusters
+      vmware_host:
+        hostname:       "{{ vcenter_details.hostname }}"
+        username:       "{{ vcenter_details.username }}"
+        password:       "{{ vcenter_details.password }}"
+        datacenter:     "{{ item.datacenter }}"
+        cluster:        "{{ item.cluster }}"
+        esxi_hostname:  "{{ item.ip }}"
+        esxi_username:  "{{ esxi_details.username }}"
+        esxi_password:  "{{ esxi_details.password }}"
+        state:          "{{ item.state }}"
+        validate_certs: "{{ esxi_details.validate_certs }}"
+      with_items:       "{{ esxi_hosts }}"
+...
