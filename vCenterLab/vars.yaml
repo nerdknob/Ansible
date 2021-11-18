@@ -4,7 +4,9 @@ vcenter_details:
   password:       "VMware1!"
   validate_certs: "false"
 
-esxi_details:
+# Set esxi_creds if ESXi hosts use the same Credentials
+# In the esxi_hosts array, set each ESXi host credentials to these variables
+esxi_creds:
   username:       "root"
   password:       "VMware1!"
   validate_certs: "false"
@@ -13,55 +15,267 @@ datacenters:
   - name:  "dc1"
     state: "present"
 
+distributed_switches:
+  - switch_name:         "management"
+    datacenter:          "dc1"
+    version:             7.0.3
+    mtu:                 9000
+    uplink_quantity:     2
+    discovery_protocol:  "lldp"
+    discovery_operation: "both"
+    state:               "present"
+    uplink_portgroup:
+      - name:                            "management-uplinks"
+        port_config_reset_at_disconnect: True
+        block_override:                  True
+        vendor_config_override:          False
+        vlan_override:                   False
+        netflow_override:                False
+        traffic_filter_override:         False
+        vlan_trunk_range:                "0-4094"
+        netflow_enabled:                 False
+        block_all_ports:                 False
+    distributed_portgroups:
+      - portgroup_name: "mgmt_pg01"
+        vlan_id:        0
+        num_ports:      120
+        portgroup_type: "earlyBinding"
+        state:          "present"
+  - switch_name:         "production"
+    datacenter:          "dc1"
+    version:             7.0.3
+    mtu:                 9000
+    uplink_quantity:     2
+    discovery_protocol:  "lldp"
+    discovery_operation: "both"
+    state:               "present"
+    uplink_portgroup:
+      - name:                            "production-uplinks"
+        port_config_reset_at_disconnect: True
+        block_override:                  True
+        vendor_config_override:          False
+        vlan_override:                   False
+        netflow_override:                False
+        traffic_filter_override:         False
+        vlan_trunk_range:                "0-4094"
+        netflow_enabled:                 False
+        block_all_ports:                 False
+    distributed_portgroups:
+      - portgroup_name: "prod_pg01"
+        vlan_id:        100
+        num_ports:      120
+        portgroup_type: "earlyBinding"
+        state:          "present"
+      - portgroup_name: "prod_pg02"
+        vlan_id:        200
+        num_ports:      120
+        portgroup_type: "earlyBinding"
+        state:          "present"
+
 clusters:
-  - name:        "mgmt"
-    datacenter:  "dc1"
-    enable_ha:   false
-    enable_drs:  false
-    enable_vsan: false
-    state:       "present"
+  - name:                    "mgmt"
+    datacenter:              "dc1"
+    enable_ha:               false
+    enable_drs:              false
+    drs_default_vm_behavior: "manual"
+    enable_vsan:             false
+    state:                   "present"
+    
+  - name:                    "cluster01"
+    datacenter:              "dc1"
+    enable_ha:               true
+    enable_drs:              true
+    drs_default_vm_behavior: "fullyAutomated"
+    enable_vsan:             false
+    state:                   "present"
 
-  - name:        "cluster01"
-    datacenter:  "dc1"
-    enable_ha:   true
-    enable_drs:  false
-    enable_vsan: false
-    state:       "present"
-
-  - name:        "cluster02"
-    datacenter:  "dc1"
-    enable_ha:   true
-    enable_drs:  false
-    enable_vsan: false
-    state:       "present"
+  - name:                    "cluster02"
+    datacenter:              "dc1"
+    enable_ha:               true
+    enable_drs:              true
+    drs_default_vm_behavior: "fullyAutomated"
+    enable_vsan:             false
+    state:                   "present"
 
 esxi_hosts:
-    - name:       "esxi01"
-      ip:         "10.10.10.2"
-      datacenter: "dc1"
-      cluster:    "mgmt"
-      state:      "present"
+    - name:           "esxi01"
+      ip:             "10.10.10.2"
+      username:       "root"
+      password:       "VMware1!"
+      validate_certs: "false"
+      datacenter:     "dc1"
+      cluster:        "mgmt"
+      state:          "present"
+      network:
+        - name:           null
+          switch:         null
+          portgroup:      null
+          type:           null
+          ip:             null
+          subnet_mask:    null
+          enable_mgmt:    null
+          enable_vmotion: null
+          tcpip_stack:    null
+          state:          null
+      vmnics:
+        - name:   null
+          switch: null
+      storage:
+        - datastore_name: null
+          datastore_type: null
+          nfs_server:     null
+          nfs_path:       null
+          nfs_ro:         null
+          state:          null
     
-    - name:       "esxi100"
-      ip:         "10.10.10.3"
-      datacenter: "dc1"
-      cluster:    "cluster01"
-      state:      "present"
+    - name:           "esxi100"
+      ip:             "10.10.10.3"
+      username:       "{{ esxi_creds.username }}"
+      password:       "{{ esxi_creds.password }}"
+      validate_certs: "{{ esxi_creds.validate_certs }}"
+      datacenter:     "dc1"
+      cluster:        "cluster01"
+      state:          "present"
+      network:
+        - name:        "vmk0"
+          switch:      "vds01"
+          portgroup:   "pg01"
+          type:        "static"
+          ip:          "10.10.10.3"
+          subnet_mask: "255.255.255.0"
+          enable_mgmt: True
+          enable_vmotion: True
+          tcpip_stack: "vmotion"
+          state:       "present"
+      vmnics:
+        - name:   "vmnic0"
+          switch: "vds01"
+        - name:   "vmnic1"
+          switch: "vds01"
+      storage:
+        - datastore_name: "cluster01_ds01"
+          datastore_type: "nfs"
+          nfs_server:     "10.10.10.10"
+          nfs_path:       "/mnt/user/cluster01_ds01"
+          nfs_ro:         no
+          state:          "present"
+        - datastore_name: "cluster01_ds02"
+          datastore_type: "nfs"
+          nfs_server:     "10.10.10.10"
+          nfs_path:       "/mnt/user/cluster01_ds02"
+          nfs_ro:         no
+          state:          "present"
 
-    - name:       "esxi101"
-      ip:         "10.10.10.4"
-      datacenter: "dc1"
-      cluster:    "cluster01"
-      state:      "present"
+    - name:           "esxi101"
+      ip:             "10.10.10.4"
+      username:       "{{ esxi_creds.username }}"
+      password:       "{{ esxi_creds.password }}"
+      validate_certs: "{{ esxi_creds.validate_certs }}"
+      datacenter:     "dc1"
+      cluster:        "cluster01"
+      state:          "present"
+      network:
+        - name:        "vmk0"
+          switch:      "vds01"
+          portgroup:   "pg01"
+          type:        "static"
+          ip:          "10.10.10.4"
+          subnet_mask: "255.255.255.0"
+          enable_mgmt: True
+          enable_vmotion: True
+          tcpip_stack: "vmotion"
+          state:       "present"
+      vmnics:
+        - name:   "vmnic0"
+          switch: "vds01"
+        - name:   "vmnic1"
+          switch: "vds01"
+      storage:
+        - datastore_name: "cluster01_ds01"
+          datastore_type: "nfs"
+          nfs_server:     "10.10.10.10"
+          nfs_path:       "/mnt/user/cluster01_ds01"
+          nfs_ro:         no
+          state:          "present"
+        - datastore_name: "cluster01_ds02"
+          datastore_type: "nfs"
+          nfs_server:     "10.10.10.10"
+          nfs_path:       "/mnt/user/cluster01_ds02"
+          nfs_ro:         no
+          state:          "present"
     
-    - name:       "esxi102"
-      ip:         "10.10.10.5"
-      datacenter: "dc1"
-      cluster:    "cluster02"
-      state:      "present"
+    - name:           "esxi102"
+      ip:             "10.10.10.5"
+      username:       "{{ esxi_creds.username }}"
+      password:       "{{ esxi_creds.password }}"
+      validate_certs: "{{ esxi_creds.validate_certs }}"
+      datacenter:     "dc1"
+      cluster:        "cluster02"
+      state:          "present"
+      network:
+        - name:        "vmk0"
+          switch:      "vds01"
+          portgroup:   "pg01"
+          type:        "static"
+          ip:          "10.10.10.5"
+          subnet_mask: "255.255.255.0"
+          enable_mgmt: True
+          enable_vmotion: True
+          tcpip_stack: "vmotion"
+          state:       "present"
+      vmnics:
+        - name:   "vmnic0"
+          switch: "vds01"
+        - name:   "vmnic1"
+          switch: "vds01"
+      storage:
+        - datastore_name: "cluster02_ds01"
+          datastore_type: "nfs"
+          nfs_server:     "10.10.10.10"
+          nfs_path:       "/mnt/user/cluster02_ds01"
+          nfs_ro:         no
+          state:          "present"
+        - datastore_name: "cluster02_ds02"
+          datastore_type: "nfs"
+          nfs_server:     "10.10.10.10"
+          nfs_path:       "/mnt/user/cluster02_ds02"
+          nfs_ro:         no
+          state:          "present"
 
-    - name:       "esxi103"
-      ip:         "10.10.10.6"
-      datacenter: "dc1"
-      cluster:    "cluster02"
-      state:      "present"
+    - name:           "esxi103"
+      ip:             "10.10.10.6"
+      username:       "{{ esxi_creds.username }}"
+      password:       "{{ esxi_creds.password }}"
+      validate_certs: "{{ esxi_creds.validate_certs }}"
+      datacenter:     "dc1"
+      cluster:        "cluster02"
+      state:          "present"
+      network:
+        - name:        "vmk0"
+          switch:      "vds01"
+          portgroup:   "pg01"
+          type:        "static"
+          ip:          "10.10.10.6"
+          subnet_mask: "255.255.255.0"
+          enable_mgmt: True
+          enable_vmotion: True
+          tcpip_stack: "vmotion"
+          state:       "present"
+      vmnics:
+        - name:   "vmnic0"
+          switch: "vds01"
+        - name:   "vmnic1"
+          switch: "vds01"
+      storage:
+        - datastore_name: "cluster02_ds01"
+          datastore_type: "nfs"
+          nfs_server:     "10.10.10.10"
+          nfs_path:       "/mnt/user/cluster02_ds01"
+          nfs_ro:         no
+          state:          "present"
+        - datastore_name: "cluster02_ds02"
+          datastore_type: "nfs"
+          nfs_server:     "10.10.10.10"
+          nfs_path:       "/mnt/user/cluster02_ds02"
+          nfs_ro:         no
+          state:          "present"

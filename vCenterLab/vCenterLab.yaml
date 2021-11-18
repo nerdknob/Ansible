@@ -15,33 +15,142 @@
         validate_certs:  "{{ vcenter_details.validate_certs }}"
         datacenter_name: "{{ item.name }}"
         state:           "{{ item.state }}"
-      with_items:        "{{ datacenters }}"
+      with_items: 
+        - "{{ datacenters }}"
 
-    - name: Create Clusters
-      vmware_cluster:
+    - name: Create Virtual Distributed Switches
+      vmware_dvswitch:
+        hostname:            "{{ vcenter_details.hostname }}"
+        username:            "{{ vcenter_details.username }}"
+        password:            "{{ vcenter_details.password }}"
+        validate_certs:      "{{ vcenter_details.validate_certs }}"
+        datacenter:          "{{ item.datacenter }}"
+        switch:              "{{ item.switch_name }}"
+        version:             "{{ item.version }}"
+        mtu:                 "{{ item.mtu }}"
+        uplink_quantity:     "{{ item.uplink_quantity }}"
+        discovery_protocol:  "{{ item.discovery_protocol }}"
+        discovery_operation: "{{ item.discovery_operation }}"
+        state:               "{{ item.state }}"
+      with_items:
+        - "{{ distributed_switches }}"
+
+    - name: Configure Uplink Portgroup
+      vmware_dvswitch_uplink_pg:
         hostname:        "{{ vcenter_details.hostname }}"
         username:        "{{ vcenter_details.username }}"
         password:        "{{ vcenter_details.password }}"
         validate_certs:  "{{ vcenter_details.validate_certs }}"
-        datacenter_name: "{{ item.datacenter }}"
-        cluster_name:    "{{ item.name }}"
-        enable_ha:       "{{ item.enable_ha }}"
-        enable_drs:      "{{ item.enable_drs }}"
-        enable_vsan:     "{{ item.enable_vsan }}"
-        state:           "{{ item.state }}"
-      with_items:        "{{ clusters }}"
+        switch:          "{{ item.0.switch_name }}"
+        name:            "{{ item.1.name }}"
+        advanced:
+          port_config_reset_at_disconnect: "{{ item.1.port_config_reset_at_disconnect }}"
+          block_override:                  "{{ item.1.block_override }}"
+          vendor_config_override:          "{{ item.1.vendor_config_override }}"
+          vlan_override:                   "{{ item.1.vlan_override }}"
+          netflow_override:                "{{ item.1.netflow_override }}"
+          traffic_filter_override:         "{{ item.1.traffic_filter_override }}"
+        vlan_trunk_range:
+          - "{{ item.1.vlan_trunk_range }}"
+        netflow_enabled: "{{ item.1.netflow_enabled }}"
+        block_all_ports: "{{ item.1.block_all_ports }}"
+      with_subelements:
+        - "{{ distributed_switches }}"
+        - uplink_portgroup
+
+    - name: Create Distributed PortGroups
+      vmware_dvs_portgroup:
+        hostname:       "{{ vcenter_details.hostname }}"
+        username:       "{{ vcenter_details.username }}"
+        password:       "{{ vcenter_details.password }}"
+        validate_certs: "{{ vcenter_details.validate_certs }}"
+        portgroup_name: "{{ item.1.portgroup_name }}"
+        switch_name:    "{{ item.0.switch_name }}"
+        vlan_id:        "{{ item.1.vlan_id }}"
+        num_ports:      "{{ item.1.num_ports }}"
+        portgroup_type: "{{ item.1.portgroup_type }}"
+        state:          "{{ item.1.state }}"
+      with_subelements: 
+        - "{{ distributed_switches }}"
+        - distributed_portgroups
+      when:
+        - item.1.portgroup_name != None
+
+    - name: Create Clusters
+      vmware_cluster:
+        hostname:                "{{ vcenter_details.hostname }}"
+        username:                "{{ vcenter_details.username }}"
+        password:                "{{ vcenter_details.password }}"
+        validate_certs:          "{{ vcenter_details.validate_certs }}"
+        datacenter_name:         "{{ item.datacenter }}"
+        cluster_name:            "{{ item.name }}"
+        enable_ha:               "{{ item.enable_ha }}"
+        enable_drs:              "{{ item.enable_drs }}"
+        drs_default_vm_behavior: "{{ item.drs_default_vm_behavior }}"
+        enable_vsan:             "{{ item.enable_vsan }}"
+        state:                   "{{ item.state }}"
+      with_items: 
+        - "{{ clusters }}"
+      
+    - name: Gather cluster info from given datacenter
+      vmware_cluster_info:
+        hostname:                "{{ vcenter_details.hostname }}"
+        username:                "{{ vcenter_details.username }}"
+        password:                "{{ vcenter_details.password }}"
+        validate_certs:          "{{ vcenter_details.validate_certs }}"
+        datacenter:              "{{ item.name }}"
+      register: cluster_info
+      with_items:
+        - "{{ datacenters }}"
+
+    - name: Disable vSphere Cluster Services
+      vars:
+        moid: "{{ cluster_info.results[0]['clusters'][item.name]['moid'] }}" #Need to make list index dynamic if more than one datacenter exists.
+        values:
+          - key: "config.vcls.clusters.{{ moid }}.enabled"
+            value: "false"
+        dict : "{{ values | items2dict }}"
+      vmware_vcenter_settings:
+        hostname:                "{{ vcenter_details.hostname }}"
+        username:                "{{ vcenter_details.username }}"
+        password:                "{{ vcenter_details.password }}"
+        validate_certs:          "{{ vcenter_details.validate_certs }}"
+        advanced_settings:
+          "{{ dict }}"
+      with_items: 
+        - "{{ clusters }}"
+
+    - name: Mount NFS datastores to ESXi hosts
+      vmware_host_datastore:
+        hostname:       "{{ item.0.ip }}"
+        username:       "{{ item.0.username }}"
+        password:       "{{ item.0.password }}"
+        validate_certs: "{{ item.0.validate_certs }}"
+        datastore_name: "{{ item.1.datastore_name }}"
+        datastore_type: "{{ item.1.datastore_type }}"
+        nfs_server:     "{{ item.1.nfs_server }}"
+        nfs_path:       "{{ item.1.nfs_path }}"
+        nfs_ro:         "{{ item.1.nfs_ro }}"
+        esxi_hostname:  "{{ item.0.ip }}"
+        state:          "{{ item.1.state }}"
+      with_subelements:
+        - "{{ esxi_hosts }}"
+        - storage
+      when: 
+        - item.1.state != None
 
     - name: Add ESXi Hosts to clusters
       vmware_host:
         hostname:       "{{ vcenter_details.hostname }}"
         username:       "{{ vcenter_details.username }}"
         password:       "{{ vcenter_details.password }}"
+        validate_certs: "{{ vcenter_details.validate_certs }}"
         datacenter:     "{{ item.datacenter }}"
         cluster:        "{{ item.cluster }}"
         esxi_hostname:  "{{ item.ip }}"
-        esxi_username:  "{{ esxi_details.username }}"
-        esxi_password:  "{{ esxi_details.password }}"
+        esxi_username:  "{{ item.username }}"
+        esxi_password:  "{{ item.password }}"
         state:          "{{ item.state }}"
-        validate_certs: "{{ esxi_details.validate_certs }}"
-      with_items:       "{{ esxi_hosts }}"
+      with_items: 
+        - "{{ esxi_hosts }}"
 ...
